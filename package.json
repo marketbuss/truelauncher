@@ -1,6 +1,6 @@
 {
   "name": "truelauncher",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Launcher terminal style hacker avec titre en pixel art",
   "bin": {
     "truelauncher": "bin/truelauncher.js"

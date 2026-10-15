@@ -22,6 +22,9 @@ Sous Windows, si PowerShell bloque les scripts : `truelauncher.cmd`.
 | a / d | ajouter un fichier / un dossier |
 | r | renommer |
 | x | retirer de la liste |
+| u | installer la mise à jour (quand le bandeau ▲ apparaît) |
 | q | quitter |
+
+Panneau système live en haut : heure, CPU, RAM, batterie, nombre de process, uptime.
 
 Config : `~/.truelauncher.json` (champ `title` pour changer le titre). `truelauncher --config` affiche son chemin.

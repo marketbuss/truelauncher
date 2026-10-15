@@ -11,6 +11,8 @@ const CONFIG = path.join(os.homedir(), '.truelauncher.json');
 const CATS = ['JEUX', 'APPS', 'SCRIPTS'];
 const IS_WIN = process.platform === 'win32';
 const out = process.stdout;
+const PKG = require('../package.json');
+const REPO = 'marketbuss/truelauncher';
 
 // ---------- couleurs ----------
 const rgb = (r, g, b) => `\x1b[38;2;${r};${g};${b}m`;
@@ -91,7 +93,61 @@ function saveConfig(cfg) { fs.writeFileSync(CONFIG, JSON.stringify(cfg, null, 2)
 // ---------- état ----------
 const cfg = loadConfig();
 const TABS = ['★ TOP', ...CATS];
-const st = { cat: 1, sel: { 0: 0, 1: 0, 2: 0, 3: 0, q: 0, scan: 0 }, scroll: 0, status: '', blink: true, flash: 0, input: null, booting: true, query: null, scan: null };
+const st = { cat: 1, sel: { 0: 0, 1: 0, 2: 0, 3: 0, q: 0, scan: 0 }, scroll: 0, status: '', blink: true, flash: 0, input: null, booting: true, query: null, scan: null,
+  sys: { cpu: 0, bat: null, proc: null }, update: null };
+
+// ---------- panneau système ----------
+let cpuPrev = os.cpus().map(c => c.times);
+function sampleCpu() {
+  const now = os.cpus().map(c => c.times);
+  let idle = 0, total = 0;
+  now.forEach((t, i) => {
+    const p = cpuPrev[i] || t;
+    const d = k => t[k] - p[k];
+    idle += d('idle');
+    total += d('user') + d('nice') + d('sys') + d('irq') + d('idle');
+  });
+  cpuPrev = now;
+  if (total > 0) st.sys.cpu = Math.round(100 * (1 - idle / total));
+}
+let sysChild = null;
+// batterie + nb de process : PowerShell en arrière-plan (lent, donc rarement et sans bloquer)
+function sampleWin() {
+  if (!IS_WIN) return;
+  if (sysChild) return; // mesure précédente encore en cours
+  sysChild = require('child_process').execFile('powershell.exe', ['-NoProfile', '-Command',
+    "[string](Get-CimInstance Win32_Battery).EstimatedChargeRemaining + '|' + (Get-Process).Count"],
+  { windowsHide: true, timeout: 8000 }, (err, stdout) => {
+    sysChild = null;
+    if (err) return;
+    const num = s => { const n = parseInt(s, 10); return Number.isFinite(n) ? n : null; };
+    const [bat, proc] = String(stdout).trim().split('|');
+    st.sys.bat = num(bat); // null sur un PC fixe
+    st.sys.proc = num(proc);
+  });
+}
+const gauge = (pct, n = 6) => {
+  const f = Math.round(pct / 100 * n);
+  return (pct >= 85 ? rgb(255, 80, 80) : HI) + '▰'.repeat(f) + DARK + '▱'.repeat(n - f);
+};
+function sysLine(W) {
+  const t = new Date().toLocaleTimeString('fr-FR');
+  const mem = 100 * (1 - os.freemem() / os.totalmem());
+  const gb = b => (b / 1024 ** 3).toFixed(1);
+  const up = os.uptime(), h = Math.floor(up / 3600), m = Math.floor(up % 3600 / 60);
+  const sep = DARK + ' │ ' + R;
+  const parts = [
+    HI + '⏱ ' + t + R,
+    DIM + 'CPU ' + gauge(st.sys.cpu) + MID + ` ${String(st.sys.cpu).padStart(2)}%` + R,
+    DIM + 'RAM ' + gauge(mem) + MID + ` ${gb(os.totalmem() - os.freemem())}/${gb(os.totalmem())}G` + R,
+  ];
+  if (st.sys.bat !== null) parts.push(DIM + 'BAT ' + MID + st.sys.bat + '%' + R);
+  if (st.sys.proc !== null) parts.push(DIM + 'PROC ' + MID + st.sys.proc + R);
+  parts.push(DIM + 'UP ' + MID + `${h}h${String(m).padStart(2, '0')}` + R);
+  // retire des blocs à droite si le terminal est trop étroit
+  while (parts.length > 1 && [...strip(parts.join(sep))].length > W - 2) parts.pop();
+  return center(parts.join(sep), W);
+}
 const mk = () => st.scan ? 'scan' : st.query !== null ? 'q' : st.cat; // clé de sélection du mode courant
 const allItems =() => CATS.flatMap(c => cfg[c]);
 const ownerOf = it => cfg[CATS.find(c => cfg[c].includes(it))];
@@ -118,7 +174,8 @@ function render(reveal = Infinity) {
   const title = cfg.title || 'TRUELAUNCHER';
   if (title.length * 6 - 1 <= W) pixelText(title, reveal).forEach((l, i) => L.push(center(B + GRAD[i] + l + R, W)));
   else L.push(center(B + HI + [...title.toUpperCase()].join(' ') + R, W)); // terminal trop étroit
-  L.push(center(DIM + '░▒▓' + MID + ' SYSTEM READY ' + DIM + '// ' + MID + `${allItems().length} ENTREE(S)` + DIM + ' ▓▒░' + R, W));
+  L.push(center(DIM + '░▒▓' + MID + ' SYSTEM READY ' + DIM + '// ' + MID + `${allItems().length} ENTREE(S)` + DIM + ` // v${PKG.version}` + ' ▓▒░' + R, W));
+  L.push(sysLine(W));
   L.push('');
 
   // onglets / barre de recherche / mode scan
@@ -164,7 +221,9 @@ function render(reveal = Infinity) {
 
   // statut / saisie
   if (st.input) L.push(pad + HI + B + st.input.label + ' ' + R + HI + st.input.value + (st.blink ? '█' : ' ') + R);
-  else L.push(pad + MID + (st.status || '') + R);
+  else if (st.status) L.push(pad + MID + st.status + R);
+  else if (st.update) L.push(pad + BAR + B + HI + ` ▲ MISE A JOUR v${st.update} DISPO ` + R + DIM + '  appuie sur ' + HI + 'u' + DIM + ' pour installer' + R);
+  else L.push('');
   L.push('');
   const k = (key, txt) => HI + key + ' ' + DIM + txt + R;
   L.push(center([k('←→', 'onglet'), k('↑↓', 'choisir'), k('⏎', 'lancer'), k('/', 'chercher'), k('f', 'favori')].join('  '), W));
@@ -392,6 +451,7 @@ function onKey(str, key = {}) {
     case 'right': case 'tab': st.cat = (st.cat + 1) % TABS.length; st.scroll = 0; st.status = ''; break;
     case 'return': return launch();
     case 's': return scan();
+    case 'u': if (st.update) return runUpdate(); break;
     case 'f': {
       const it = items()[st.sel[mk()]];
       if (it) { it.fav = !it.fav; saveConfig(cfg); st.status = it.fav ? `> ★ FAVORI : ${it.name}` : `> favori retire : ${it.name}`; }
@@ -421,7 +481,32 @@ function onKey(str, key = {}) {
 
 function quit() {
   out.write(R + '\x1b[?25h\x1b[?1049l');
+  if (sysChild) sysChild.kill(); // évite un crash libuv si PowerShell tourne encore
   process.exit(0);
+}
+
+// ---------- mise à jour ----------
+const newer = (a, b) => { // a > b ?
+  const x = a.split('.').map(Number), y = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+  return false;
+};
+async function checkUpdate() {
+  try {
+    const res = await fetch(`https://raw.githubusercontent.com/${REPO}/main/package.json`, { signal: AbortSignal.timeout(5000) });
+    const { version } = await res.json();
+    if (version && newer(version, PKG.version)) { st.update = version; if (!st.booting) render(); }
+  } catch { /* hors ligne : on ignore */ }
+}
+function runUpdate() {
+  out.write(R + '\x1b[?25h\x1b[?1049l');
+  process.stdin.setRawMode(false);
+  console.log(`${HI}> mise a jour vers v${st.update}...${R}\n`);
+  const r = require('child_process').spawnSync(`npm install -g github:${REPO}`, { shell: true, stdio: 'inherit' });
+  console.log(r.status === 0
+    ? `\n${HI}> truelauncher v${st.update} installe ! relance-le.${R}`
+    : `\n${rgb(255, 80, 80)}! echec de la mise a jour (code ${r.status}).${R}`);
+  process.exit(r.status || 0);
 }
 
 // ---------- démarrage ----------
@@ -434,6 +519,10 @@ process.stdin.setRawMode(true);
 process.stdin.on('keypress', onKey);
 process.on('exit', () => out.write(R + '\x1b[?25h\x1b[?1049l'));
 out.on('resize', () => { out.write('\x1b[2J'); if (!st.booting) render(); });
+checkUpdate();
+sampleWin();
+setInterval(sampleCpu, 1000);
+setInterval(sampleWin, 15000);
 
 matrixIntro(() => revealTitle(() => {
   st.booting = false;
