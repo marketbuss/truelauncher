@@ -13,9 +13,12 @@ Sous Windows, si PowerShell bloque les scripts : `truelauncher.cmd`.
 
 | Touche | Action |
 |---|---|
-| ← → | changer d'onglet (JEUX / APPS / SCRIPTS) |
+| ← → | changer d'onglet (★ TOP / JEUX / APPS / SCRIPTS) |
 | ↑ ↓ | choisir |
 | Entrée | lancer |
+| / | recherche instantanée dans tous les onglets |
+| f | favori (★ TOP = favoris puis les plus lancés) |
+| s | scan auto : Steam, Epic, raccourcis Bureau / Menu Démarrer (espace cocher, * tout, Entrée ajouter) |
 | a / d | ajouter un fichier / un dossier |
 | r | renommer |
 | x | retirer de la liste |
