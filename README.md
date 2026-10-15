@@ -3,7 +3,7 @@
 Launcher terminal style hacker avec titre en pixel art et intro Matrix.
 
 ```
-npm install -g truelauncher
+npm install -g github:marketbuss/truelauncher
 truelauncher
 ```
 
