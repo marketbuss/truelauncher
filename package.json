@@ -1,0 +1,13 @@
+{
+  "name": "truelauncher",
+  "version": "1.0.0",
+  "description": "Launcher terminal style hacker avec titre en pixel art",
+  "bin": {
+    "truelauncher": "bin/truelauncher.js"
+  },
+  "files": ["bin"],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}
